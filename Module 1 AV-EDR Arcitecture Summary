@@ -1,0 +1,191 @@
+## Detections 
+
+### Signature-Based Detection
+זיהוי מבוסס חתימה איזהשהו דפוס קבוע שמתלווה לתוכנה זדונית ואם מופיע אז ה AV יודע שמדובר בנוזקה.
+### Heuristic Detection
+זיהוי דפוס התנהגותי של הקוד על ידי חוקים במטרה לזהות התנהגות שמתאימה לנוזקות - כלומר מדובר בסריקה של הקוד.
+
+
+### Behavioral Detection
+זיהוי על בסיס התנהגות הקוד בזמן הריצה עוקב אחרי קריאות יצירה של תהלכים וכל הנוגע להתנהגות הקוד בזמן ריצה.
+
+### Machine Learning Based Detection
+לומד את הרשת ואז מזהה אנומליות ביחס אליה 
+
+
+
+
+## EDR Components
+
+senseor -
+חיישן,סוכן אוסף מידע ובודק התנהגות בזמן אמת - נמצא על עמדת הקצה 
+
+kernel driver -
+ רץ יחד עם הליבה של מערכת ההפעלה ומנתח קריאות אליה כך שיוכל לנתח קריאות לחלק הנמוך שלה.
+
+
+
+userland components -
+אוספים מידע ומנטרים על הפעולות שנעשות על ידי המשתמש ברמת מערכת ההפעלה 
+
+Backend -
+המרכז שמאחורי הקלעים אליו נשלח המידע מהסוכנים ומנתח בשביל למצוא קשר מכיל כלים לניתוח של אנליסט 
+cloud component - 
+נועד בשביל אנליזות כבדות והפצת עדכונים ניהול מרוחק.![[Pasted image 20260725102637.png]]
+
+### API & System Calls 
+API Calls - 
+פונקציות של מערכת ההפעלה שבעזרתן היא מאפשרת לתוכנה חיצונית לתקשר איתה ולבצע בה פעולות כמו למשל יצירת קבצים או תקשורת חיצונית.
+Syscalls -
+קוד נמוך שמתקשר עם הליבה מיושם על ידי בקשות מה USER-MODE לשירותי הליבה כך שלמשל CreateProcessA שהוא API Call מ kernel32.dll  בסוף מיישמת את NtCreateUserProcess מהליבה דרך Syscall
+
+
+מה יש לEDR לחפש שם?
+
+זיהוי התנהגות זדונית, לעקוב אחרי התנהגויות לטובת ניתוח מאוחר, החלה של הגבלות כמו למשל חסימה של POWERSHELL מ OFFICE 
+
+|Monitoring Method|Description|Visibility Level|Common Usage|
+|---|---|---|---|
+|**API Hooking (Userland)**|Redirects calls to API functions through trampoline patches or IAT.|User-mode|EDR sensors, AVs|
+|**Inline Hooking**|Overwrites the beginning of a function (prologue) to jump to a custom routine.|User-mode or Kernel|AVs, Injectors|
+|**Import Address Table (IAT)**|Modifies the address of a function in the IAT of a PE file.|User-mode|AVs, Malware|
+|**ETW (Event Tracing for Windows)**|Uses kernel instrumentation callbacks to track syscalls and events.|Kernel + User|EDRs, Sysmon|
+|**Kernel Callbacks**|Uses kernel-mode callbacks for process, thread, image load, registry.|Kernel-mode|EDRs, Drivers|
+|**System Call Hooks**|Intercepts syscalls at SSDT (System Service Dispatch Table).|Kernel-mode|Rare (needs driver)|
+|**User-Mode API Logging**|Logs all calls to high-level APIs (e.g., via Detours, MinHook).|User-mode|EDR telemetry|****
+#### **Userland Evasion Strategies**:
+
+- **Manual Mapping**: Load DLLs manually to avoid `LoadLibrary()` and IAT logging.
+- **Direct Syscalls**: Use tools like `SysWhispers` or `Hell’s Gate` to call syscalls directly.
+- **Indirect Syscalls**: Use gadgets or stub functions to obfuscate call stack.
+
+#### [](https://courses.redteamleaders.com/courses/3e9e0212-81dc-49ed-9233-ec9ca894fc6a/take/14---api-and-system-call-monitoring#user-content-kernel-level-evasion-advanced)**Kernel-Level Evasion (Advanced)**:
+
+- **Syscall Stomping**: Overwrite syscall instructions to redirect to alternative syscalls.
+- **ETW Bypass**: Patch or disable ETW consumers like `EtwEventWrite`.
+- **Callback Removal**: Unregister kernel callbacks (requires kernel-mode driver).
+## Userland & Kernel Hooking
+
+### **Userland Hooking**
+
+**Definition:**
+
+Userland hooking intercepts calls made by applications to high-level APIs (such as `CreateProcess`, `VirtualAlloc`, `ReadFile`, etc.) in DLLs like `kernel32.dll` and `user32.dll`.
+
+**Techniques:**
+
+- **Inline Hooking**: Overwriting the prologue (first bytes) of a function to redirect execution to a monitoring or malicious function.
+- **Import Address Table (IAT) Hooking**: Changing function pointers in a module’s IAT to redirect to a different implementation.
+- **Detour Libraries**: Using Microsoft Detours or similar libraries to wrap or replace functions
+### **Kernelland Hooking**
+
+Kernelland hooking involves monitoring or modifying behavior at the kernel level using drivers, typically implemented via kernel-mode callbacks or by modifying system structures like the SSDT (System Service Dispatch Table).
+
+#### [](https://courses.redteamleaders.com/courses/3e9e0212-81dc-49ed-9233-ec9ca894fc6a/take/15---userland-vs-kernelland-hooking#user-content-techniques-1)**Techniques:**
+
+- **SSDT Hooking**: Intercepting system calls by modifying the SSDT to point to custom handlers.
+- **Callback Registration**: Using legitimate kernel APIs to register callbacks:
+    - `PsSetCreateProcessNotifyRoutine`
+    - `PsSetLoadImageNotifyRoutine`
+    - `CmRegisterCallback`
+- **Object Callbacks**: Intercepting object operations with `ObRegisterCallbacks`.
+
+### **Comparison Table**
+
+|Feature|Userland Hooking|Kernelland Hooking|
+|---|---|---|
+|Level of Operation|User mode|Kernel mode|
+|Target|API calls in DLLs|System calls, kernel events|
+|Examples|CreateProcess, VirtualAlloc, WriteFile|NtCreateProcess, NtMapViewOfSection|
+|Bypass Methods|Direct syscalls, unhooking|Rootkits, driver exploits, signed drivers|
+|Detection Coverage|Limited to user-mode activity|Full OS-level visibility|
+|Deployment Complexity|Easy (no admin required)|Requires driver and signing|
+|Used by|AVs, EDRs, Injectors|EDRs, Rootkits, Kernel-mode malware|
+
+
+### **Detection and Anti-Detection**
+
+- **Indicators of Hooking**:
+    - Prologue modification (e.g., JMP instructions).
+    - Suspicious DLLs in memory (e.g., unknown EDR hooks).
+    - Differences in loaded `ntdll.dll` between memory and disk.
+- **Detection Tools**:
+    - `PE-sieve`, `HookFinder`, `HollowsHunter`, `Detect-It-Easy`.
+- **Unhooking Strategies**:
+    - **Manual Patching**: Copy clean syscall instructions into memory.
+    - **ReMap `ntdll.dll`**: Load a fresh copy manually.
+    - **Use SysWhispers/Hell's Gate**: Avoid user-mode altogether.
+
+
+### **Evasion Summary Table**
+
+|Monitoring Mechanism|Used by AV/EDR|Commonly Tracked|Bypass Technique|
+|---|---|---|---|
+|ETW|All major EDRs|Process, Registry, Images|Patch EtwEventWrite or unregister|
+|Syscall Tracing|Advanced EDRs, Sandbox|Low-level API behavior|Direct syscalls, syscall spoofing|
+|Kernel Callbacks|Kernel-mode sensors|Process/image/registry|Ghosting, Obfuscation, Tampering|
+
+### **Communication Protocols and Data Types**
+
+#### [](https://courses.redteamleaders.com/courses/3e9e0212-81dc-49ed-9233-ec9ca894fc6a/take/17---data-communication-between-agent-and-cloud-agent--cloud#user-content-protocols-used)**Protocols Used:**
+
+- HTTPS (TLS-encrypted) – standard for secure telemetry transmission
+- MQTT, WebSocket – used in lightweight real-time communication
+- Proprietary binary protocols (compressed and serialized)
+
+#### [](https://courses.redteamleaders.com/courses/3e9e0212-81dc-49ed-9233-ec9ca894fc6a/take/17---data-communication-between-agent-and-cloud-agent--cloud#user-content-data-types-transmitted)**Data Types Transmitted:**
+
+- Process creation logs
+- DLL loads and image hashes
+- Registry modification entries
+- File operations (create, read, write, delete)
+- Network connections and DNS requests
+- Memory region allocations and injections
+- Alerts or policy violation reports
+### **Data Transmission Behavior**
+
+|**Property**|**Description**|
+|---|---|
+|**Real-Time Streaming**|High-priority events sent immediately (e.g., malware detection)|
+|**Batch Upload**|Low-priority data is cached and sent periodically|
+|**Offline Buffering**|Data is stored locally if offline and sent upon reconnection|
+|**Heartbeat Messages**|Periodic checks to indicate agent health/status|
+
+### **Evasion Opportunities and Limitations**
+
+#### [](https://courses.redteamleaders.com/courses/3e9e0212-81dc-49ed-9233-ec9ca894fc6a/take/17---data-communication-between-agent-and-cloud-agent--cloud#user-content-potential-evasion-techniques)**Potential Evasion Techniques:**
+
+- Blocking outbound traffic to cloud IPs/domains
+- Detecting and killing EDR agent processes or services
+- DNS poisoning or TLS interception (difficult if cert-pinned)
+- Faking data with custom agent mimicry (advanced)
+- Overloading or flooding telemetry channels to hide malicious activity
+- Operating fully in memory to avoid filesystem and registry I/O
+
+#### [](https://courses.redteamleaders.com/courses/3e9e0212-81dc-49ed-9233-ec9ca894fc6a/take/17---data-communication-between-agent-and-cloud-agent--cloud#user-content-limitations-of-evasion)**Limitations of Evasion:**
+
+- Some EDRs work in **kernel mode**, harder to disable without a driver
+- Agents often have **self-defense mechanisms**
+- Cloud correlation can detect “low-noise” threats by pattern
+- Some agents enforce **zero-trust policies** locally (block before sending)
+
+---
+
+### Red Team Considerations
+
+- Understand which **domain/IPs** are used by the EDR (e.g., via Wireshark or `netstat`)
+- Test if **blocking communication** impacts detection
+- Evaluate **delayed telemetry submission** vs. real-time events
+- Monitor agent logs in `%ProgramData%` or `C:\Program Files\` (some leave clear trails)
+- Use **proxy-aware implants** that can blend in with enterprise traffic
+### **Practical Detection Vectors Table**
+
+| **Vector**         | **Monitored By**              | **Used For**                 |
+| ------------------ | ----------------------------- | ---------------------------- |
+| Syscalls           | Userland Hooks, ETW, Kernel   | Process Injection, Exploits  |
+| Memory Buffers     | Agent Scanner, Kernel Driver  | Shellcode, Reflective DLLs   |
+| File Access        | Sysmon, ETW, File System Hook | Droppers, Stagers            |
+| Network            | Agent, ETW, NDIS Filter       | C2 Detection, DNS Tunneling  |
+| Registry           | Registry Filter Driver        | Persistence, Payload Loading |
+| Process Trees      | Kernel + Agent                | LOLBAS, Anomalous Behavior   |
+| Entropy/Signatures | Static Scanners               | Packed Files, Obfuscation    |

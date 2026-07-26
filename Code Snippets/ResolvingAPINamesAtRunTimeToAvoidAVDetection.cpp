@@ -9,3 +9,4 @@ int main() {
     void* mem = myVA(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     return 0;
 }
+// Avoiding detection based on imports and api name 

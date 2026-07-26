@@ -1,0 +1,6 @@
+const char* part1 = "192";
+const char* part2 = ".168";
+const char* part3 = ".0";
+const char* part4 = ".1";
+
+std::string ip = std::string(part1) + part2 + part3 + part4;
